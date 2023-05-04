@@ -156,9 +156,9 @@ class LoraModel(torch.nn.Module):
     def add_adapter(self, adapter_name, config=None):
         if config is not None:
             model_config = self.model.config.to_dict() if hasattr(self.model.config, "to_dict") else self.model.config
-            config = self._prepare_lora_config(config, model_config)
+            config = self._prepare_lora_config(config, model_config) # 得到所有 lora 所需配置
             self.peft_config[adapter_name] = config
-        self._find_and_replace(adapter_name)
+        self._find_and_replace(adapter_name) # 替换层
         if len(self.peft_config) > 1 and self.peft_config[adapter_name].bias != "none":
             raise ValueError(
                 "LoraModel supports only 1 adapter with bias. When using multiple adapters, set bias to 'none' for all adapters."
@@ -183,11 +183,13 @@ class LoraModel(torch.nn.Module):
             "fan_in_fan_out": lora_config.fan_in_fan_out,
             "init_lora_weights": lora_config.init_lora_weights,
         }
+        # 遍历模型所有层
         key_list = [key for key, _ in self.model.named_modules()]
         for key in key_list:
             if isinstance(lora_config.target_modules, str):
                 target_module_found = re.fullmatch(lora_config.target_modules, key)
             else:
+                # 查看是否在 target_modules 中
                 target_module_found = any(key.endswith(target_key) for target_key in lora_config.target_modules)
             if target_module_found:
                 if not is_target_modules_in_base_model:
@@ -224,6 +226,7 @@ class LoraModel(torch.nn.Module):
                         in_features, out_features = target.num_embeddings, target.embedding_dim
                         new_module = Embedding(adapter_name, in_features, out_features, **embedding_kwargs)
                     else:
+                        # 替换掉
                         if isinstance(target, torch.nn.Linear):
                             in_features, out_features = target.in_features, target.out_features
                             if kwargs["fan_in_fan_out"]:
@@ -247,8 +250,9 @@ class LoraModel(torch.nn.Module):
                                 f"Target module {target} is not supported. "
                                 f"Currently, only `torch.nn.Linear` and `Conv1D` are supported."
                             )
+                        # 生成新的 Linear 层
                         new_module = Linear(adapter_name, in_features, out_features, bias=bias, **kwargs)
-
+                    # 替换原先层
                     self._replace_module(parent, target_name, new_module, target)
         if not is_target_modules_in_base_model:
             raise ValueError(
@@ -454,6 +458,7 @@ class LoraLayer:
         if r > 0:
             self.lora_A.update(nn.ModuleDict({adapter_name: nn.Linear(self.in_features, r, bias=False)}))
             self.lora_B.update(nn.ModuleDict({adapter_name: nn.Linear(r, self.out_features, bias=False)}))
+            # lora_alpha 是一个缩放系数
             self.scaling[adapter_name] = lora_alpha / r
         if init_lora_weights:
             self.reset_lora_parameters(adapter_name)
@@ -517,6 +522,7 @@ class Linear(nn.Linear, LoraLayer):
             self.weight.data = self.weight.data.T
 
         nn.Linear.reset_parameters(self)
+        # Initialize the Lora layer
         self.update_layer(adapter_name, r, lora_alpha, lora_dropout, init_lora_weights)
         self.active_adapter = adapter_name
 
