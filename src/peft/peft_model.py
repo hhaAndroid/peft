@@ -543,10 +543,10 @@ class PeftModelForSequenceClassification(PeftModel):
                     dim=1,
                 ).long()
             if inputs_embeds is None:
-                inputs_embeds = self.word_embeddings(input_ids)
-            prompts = self.get_prompt(batch_size=batch_size)
+                inputs_embeds = self.word_embeddings(input_ids) # 输入进行 embedding
+            prompts = self.get_prompt(batch_size=batch_size) # 获得 prompt 的 embeding
             prompts = prompts.to(inputs_embeds.dtype)
-            inputs_embeds = torch.cat((prompts, inputs_embeds), dim=1)
+            inputs_embeds = torch.cat((prompts, inputs_embeds), dim=1)  # 拼接作为输入即可 （1,20+n,768）
             return self.base_model(inputs_embeds=inputs_embeds, **kwargs)
 
     def _prefix_tuning_forward(
